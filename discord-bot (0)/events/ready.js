@@ -9,8 +9,10 @@ module.exports = {
 
     const statusText = config.botStatus;
     if (statusText) {
+      // For ActivityType.Custom, Discord actually displays whatever is in
+      // `state` — `name` is required by the API but ignored for this type.
       client.user.setPresence({
-        activities: [{ name: statusText, type: ActivityType.Custom }],
+        activities: [{ name: 'Custom Status', type: ActivityType.Custom, state: statusText }],
         status: 'online',
       });
     }
