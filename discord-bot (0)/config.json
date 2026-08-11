@@ -6,11 +6,16 @@
     "color": "#800080",
     "thumbnailIsAvatar": true
   },
+  "protectedPingUserIds": ["PUT_USER_ID_HERE", "PUT_ANOTHER_USER_ID_HERE"],
+  "pingTimeoutMinutes": 10,
+  "botStatus": "cambo x hightide = aura",
+
   "ticketCategoryId": "",
   "ticketLogChannelId": "1536640721006624829",
   "ticketRoleIds": ["1536634089111814214"],
   "maxOpenTicketsPerUser": 2,
   "closeCountdownSeconds": 5,
+
   "panel": {
     "title": "",
     "description": "Select an option below to open a ticket.\n\n**Support** — Get support/help from our staff\n**Giveaway Claim** — Claim a giveaway/quickdrop you won\n**Giveaway Sponsor** — Sponsor a giveaway/quickdrop for the server\n**Spawner Sell** — Sell spawners to staff (never in DMs)\n**Spawner Buy** — Buy spawners from staff (never in DMs)",
@@ -54,6 +59,7 @@
       "channelCategoryId": "1536635002417193021"
     }
   ],
+
   "applicationReviewChannelId": "PUT_APPLICATION_REVIEW_CHANNEL_ID_HERE",
   "applicationStaffRoleIds": ["PUT_APPLICATION_STAFF_ROLE_ID_HERE"],
   "applications": [
