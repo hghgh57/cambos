@@ -6,7 +6,7 @@
     "color": "#800080",
     "thumbnailIsAvatar": true
   },
-  "protectedPingUserIds": ["PUT_USER_ID_HERE", "PUT_ANOTHER_USER_ID_HERE"],
+  "protectedPingUserIds": ["1480382650551111844", "PUT_ANOTHER_USER_ID_HERE"],
   "pingTimeoutMinutes": 10,
   "botStatus": "cambo x hightide = aura",
 
