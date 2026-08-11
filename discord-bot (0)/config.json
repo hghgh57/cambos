@@ -14,19 +14,47 @@
 
   "panel": {
     "title": "",
-    "description": "Select an option below to open a ticket.",
+    "description": "select an option below to open a ticket.\n\n**Support** — Get support/help from our staff\n**Giveaway Claim** — Claim a giveaway/quickdrop you won\n**Giveaway Sponsor** — Sponsor a giveaway/quickdrop for the server\n**Spawner Sell** — Sell spawners to staff (never in DMs)\n**Spawner Buy** — Buy spawners from staff (never in DMs)",
     "color": "#5865F2",
     "style": "dropdown"
   },
-  "categories": [
-    {
-      "id": "support",
-      "label": "Support",
-      "description": "General help or questions",
-      "emoji": "🎫"
-    }
-  ],
-
+"categories": [
+  {
+    "id": "support",
+    "label": "Support",
+    "description": "General help or questions",
+    "emoji": "🎫",
+    "channelCategoryId": "1536634321656352820"
+  },
+  {
+    "id": "claim",
+    "label": "giveaway claim",
+    "description": "claim a giveaway you won",
+    "emoji": "🎉",
+    "channelCategoryId": "1536634744283074610"
+  },
+  {
+    "id": "giveaway sponsor",
+    "label": "giveaway sponsor",
+    "description": "sponsor a giveaway",
+    "emoji": "🏆",
+    "channelCategoryId": "1536634786712649739"
+  },
+  {
+    "id": "spawner sell",
+    "label": "spawner sell",
+    "description": "sell spawners to staff",
+    "emoji": "💀",
+    "channelCategoryId": "1536634954564370452"
+  },
+  {
+    "id": "spawner buy",
+    "label": "spawner buy",
+    "description": "buy spawners from staff",
+    "emoji": "💀",
+    "channelCategoryId": "1536635002417193021"
+  }
+]
   "applicationReviewChannelId": "PUT_APPLICATION_REVIEW_CHANNEL_ID_HERE",
   "applicationStaffRoleIds": ["PUT_APPLICATION_STAFF_ROLE_ID_HERE"],
   "applications": [
