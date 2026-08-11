@@ -7,7 +7,7 @@
     "thumbnailIsAvatar": true
   },
   "ticketCategoryId": "",
-  "ticketRoleIds": [""],
+  "ticketRoleIds": ["1536634089111814214"],
   "maxOpenTicketsPerUser": 2,
   "closeCountdownSeconds": 5,
   "panel": {
