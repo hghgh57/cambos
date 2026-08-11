@@ -1,165 +1,247 @@
 const {
-  PermissionsBitField,
-  ChannelType,
-  EmbedBuilder,
+  SlashCommandBuilder,
+  PermissionFlagsBits,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
 } = require('discord.js');
+const fs = require('fs');
+const path = require('path');
 const config = require('../config.json');
 
-function parseTopic(topic) {
-  if (!topic || !topic.startsWith('ticket|')) return null;
-  const [, userId, categoryId] = topic.split('|');
-  return { userId, categoryId };
+const CONFIG_PATH = path.join(__dirname, '..', 'config.json');
+const STEP_TIMEOUT = 5 * 60 * 1000; // 5 minutes per step
+const REQUIRED_COUNT = 3;
+const OPTIONAL_MAX = 10;
+const TOTAL_MAX = REQUIRED_COUNT + OPTIONAL_MAX;
+
+function saveConfig() {
+  fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
 }
 
-function getTicketRoleIds() {
-  return (config.ticketRoleIds || []).filter((id) => id && !id.startsWith('PUT_'));
-}
-
-function countOpenTicketsForUser(guild, userId) {
-  return guild.channels.cache.filter((c) => {
-    const meta = parseTopic(c.topic);
-    return meta && meta.userId === userId;
-  }).size;
-}
-
-function buildTicketControlRow(claimed = false) {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('ticket_claim')
-      .setLabel(claimed ? 'Claimed' : 'Claim')
-      .setEmoji('🙋')
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(claimed),
-    new ButtonBuilder()
-      .setCustomId('ticket_close')
-      .setLabel('Close')
-      .setEmoji('🔒')
-      .setStyle(ButtonStyle.Danger)
+function slugify(label) {
+  return (
+    label
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '') || `category_${Date.now()}`
   );
 }
 
-async function createTicket(interaction, categoryId) {
-  const { guild, user } = interaction;
-  const category = (config.categories || []).find((c) => c.id === categoryId);
-  if (!category) {
-    return interaction.reply({ content: 'Unknown ticket category.', ephemeral: true });
-  }
+// Ensures uniqueness against ids already chosen in this session — Discord
+// rejects select menus/buttons that share a value/customId, so two
+// categories that slugify to the same id (e.g. "Support" and "support!!")
+// would otherwise break /ticket-panel.
+function uniqueId(base, existingIds) {
+  if (!existingIds.has(base)) return base;
+  let n = 2;
+  while (existingIds.has(`${base}_${n}`)) n++;
+  return `${base}_${n}`;
+}
 
-  const existing = countOpenTicketsForUser(guild, user.id);
-  if (existing >= (config.maxOpenTicketsPerUser || 2)) {
-    return interaction.reply({
-      content: `You already have ${existing} open ticket(s). Please close them before opening a new one.`,
+module.exports = {
+  data: new SlashCommandBuilder()
+    .setName('ticket-setup')
+    .setDescription('Interactively configure the ticket panel (description, style, categories)')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
+
+  async execute(interaction) {
+    // ---- Step 1: title + description modal ----
+    const descModal = new ModalBuilder().setCustomId('ticket_setup_desc_modal').setTitle('Ticket Panel Setup (1/3)');
+
+    const titleInput = new TextInputBuilder()
+      .setCustomId('panel_title')
+      .setLabel('Panel title (leave blank for none)')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(false)
+      .setMaxLength(100);
+
+    const descInput = new TextInputBuilder()
+      .setCustomId('panel_description')
+      .setLabel('Panel description')
+      .setStyle(TextInputStyle.Paragraph)
+      .setRequired(true)
+      .setMaxLength(2000);
+
+    descModal.addComponents(
+      new ActionRowBuilder().addComponents(titleInput),
+      new ActionRowBuilder().addComponents(descInput)
+    );
+
+    await interaction.showModal(descModal);
+
+    const descSubmit = await interaction
+      .awaitModalSubmit({ time: STEP_TIMEOUT, filter: (i) => i.customId === 'ticket_setup_desc_modal' && i.user.id === interaction.user.id })
+      .catch(() => null);
+
+    if (!descSubmit) return; // timed out — silently stop, nothing saved
+
+    const panelTitle = descSubmit.fields.getTextInputValue('panel_title').trim();
+    const panelDescription = descSubmit.fields.getTextInputValue('panel_description').trim();
+
+    // ---- Step 2: dropdown vs buttons ----
+    const styleRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('ticket_setup_style_dropdown').setLabel('Dropdown').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('ticket_setup_style_buttons').setLabel('Buttons').setStyle(ButtonStyle.Primary)
+    );
+
+    await descSubmit.reply({
+      content: 'Step 2/3 — Should the panel use a **dropdown menu** or **buttons** for the categories?',
+      components: [styleRow],
       ephemeral: true,
     });
-  }
 
-  await interaction.deferReply({ ephemeral: true });
+    let promptMsg = await descSubmit.fetchReply();
+    const styleClick = await promptMsg
+      .awaitMessageComponent({ time: STEP_TIMEOUT, filter: (i) => i.user.id === interaction.user.id })
+      .catch(() => null);
 
-  const permissionOverwrites = [
-    { id: guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-    {
-      id: user.id,
-      allow: [
-        PermissionsBitField.Flags.ViewChannel,
-        PermissionsBitField.Flags.SendMessages,
-        PermissionsBitField.Flags.ReadMessageHistory,
-        PermissionsBitField.Flags.AttachFiles,
-      ],
-    },
-  ];
+    if (!styleClick) return;
 
-  for (const roleId of getTicketRoleIds()) {
-    permissionOverwrites.push({
-      id: roleId,
-      allow: [
-        PermissionsBitField.Flags.ViewChannel,
-        PermissionsBitField.Flags.SendMessages,
-        PermissionsBitField.Flags.ReadMessageHistory,
-        PermissionsBitField.Flags.ManageMessages,
-      ],
-    });
-  }
+    const style = styleClick.customId === 'ticket_setup_style_buttons' ? 'buttons' : 'dropdown';
 
-  const safeName = user.username.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 20) || 'user';
+    // ---- Step 3: collect categories (3 required, then up to 10 optional) ----
+    const categories = [];
+    let current = styleClick; // most recent interaction we can act on
 
-  const channelOptions = {
-    name: `ticket-${safeName}`,
-    type: ChannelType.GuildText,
-    topic: `ticket|${user.id}|${categoryId}`,
-    permissionOverwrites,
-  };
+    while (true) {
+      const requiredLeft = Math.max(0, REQUIRED_COUNT - categories.length);
+      const canFinish = categories.length >= REQUIRED_COUNT;
+      const atMax = categories.length >= TOTAL_MAX;
 
-  if (config.ticketCategoryId && !config.ticketCategoryId.startsWith('PUT_')) {
-    channelOptions.parent = config.ticketCategoryId;
-  }
+      const row = new ActionRowBuilder();
+      if (!atMax) {
+        row.addComponents(
+          new ButtonBuilder()
+            .setCustomId('ticket_setup_add_category')
+            .setLabel(
+              requiredLeft > 0
+                ? `Add Required Category (${categories.length + 1}/${REQUIRED_COUNT})`
+                : `Add Optional Category (${categories.length - REQUIRED_COUNT + 1}/${OPTIONAL_MAX})`
+            )
+            .setStyle(ButtonStyle.Success)
+        );
+      }
+      if (canFinish) {
+        row.addComponents(
+          new ButtonBuilder().setCustomId('ticket_setup_finish').setLabel('Finish Setup').setStyle(ButtonStyle.Primary)
+        );
+      }
 
-  const channel = await guild.channels.create(channelOptions);
+      const summary = categories.length
+        ? categories.map((c, i) => `${i + 1}. ${c.emoji || ''} **${c.label}**`).join('\n')
+        : '*(none yet)*';
 
-  const welcomeEmbed = new EmbedBuilder()
-    .setDescription(
-      `Hi ${user}, thanks for reaching out!\n\n` +
-        `**Category:** ${category.label}\n` +
-        `Please describe your issue in as much detail as possible. A member of our team will be with you shortly.`
-    )
-    .setColor(config.panel.color || '#5865F2')
-    .setTimestamp();
-  if (category.label) welcomeEmbed.setTitle(`${category.emoji || '🎫'} ${category.label}`);
+      const content =
+        `**Step 3/3 — Ticket Categories**\n` +
+        (requiredLeft > 0
+          ? `Add ${requiredLeft} more required categor${requiredLeft === 1 ? 'y' : 'ies'}.`
+          : atMax
+          ? `Maximum of ${TOTAL_MAX} categories reached.`
+          : `Add up to ${TOTAL_MAX - categories.length} more optional categories, or finish.`) +
+        `\n\n${summary}`;
 
-  const mentions = getTicketRoleIds()
-    .map((id) => `<@&${id}>`)
-    .join(' ');
+      // `current` is either the button that opened this step, or the modal
+      // submission from an "Add Category" button — both support .update()
+      // to edit the same wizard message in place (avoids spamming new
+      // ephemeral messages every time a category is added).
+      await current.update({ content, components: [row] });
+      promptMsg = await current.fetchReply();
 
-  await channel.send({
-    content: `${user} ${mentions}`.trim(),
-    embeds: [welcomeEmbed],
-    components: [buildTicketControlRow()],
-  });
+      const click = await promptMsg
+        .awaitMessageComponent({ time: STEP_TIMEOUT, filter: (i) => i.user.id === interaction.user.id })
+        .catch(() => null);
 
-  await interaction.editReply({ content: `Your ticket has been created: ${channel}` });
-}
+      if (!click) break; // timed out — fall through to save-what-we-have below
 
-async function claimTicket(interaction) {
-  const meta = parseTopic(interaction.channel.topic);
-  if (!meta) {
-    return interaction.reply({ content: 'This does not look like a ticket channel.', ephemeral: true });
-  }
+      if (click.customId === 'ticket_setup_finish') {
+        current = click;
+        break;
+      }
 
-  const member = interaction.member;
-  const isTicketStaff = getTicketRoleIds().some((id) => member.roles.cache.has(id));
-  if (!isTicketStaff && !member.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
-    return interaction.reply({ content: 'Only ticket staff can claim tickets.', ephemeral: true });
-  }
+      // "Add category" clicked — show the category modal
+      const catModal = new ModalBuilder().setCustomId('ticket_setup_cat_modal').setTitle(`Category ${categories.length + 1}`);
 
-  const embed = new EmbedBuilder()
-    .setDescription(`🙋 This ticket has been claimed by ${interaction.user}.`)
-    .setColor('#57F287');
+      const labelInput = new TextInputBuilder()
+        .setCustomId('cat_label')
+        .setLabel('Label shown to users')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setMaxLength(80);
 
-  await interaction.reply({ embeds: [embed] });
-  await interaction.message.edit({ components: [buildTicketControlRow(true)] }).catch(() => {});
-}
+      const catDescInput = new TextInputBuilder()
+        .setCustomId('cat_description')
+        .setLabel('Short description')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setMaxLength(100);
 
-async function closeTicket(interaction) {
-  const meta = parseTopic(interaction.channel.topic);
-  if (!meta) {
-    return interaction.reply({ content: 'This does not look like a ticket channel.', ephemeral: true });
-  }
+      const emojiInput = new TextInputBuilder()
+        .setCustomId('cat_emoji')
+        .setLabel('Emoji (optional)')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false)
+        .setMaxLength(10);
 
-  const member = interaction.member;
-  const isTicketStaff = getTicketRoleIds().some((id) => member.roles.cache.has(id));
-  const isOwner = member.id === meta.userId;
-  if (!isTicketStaff && !isOwner && !member.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
-    return interaction.reply({ content: 'You do not have permission to close this ticket.', ephemeral: true });
-  }
+      catModal.addComponents(
+        new ActionRowBuilder().addComponents(labelInput),
+        new ActionRowBuilder().addComponents(catDescInput),
+        new ActionRowBuilder().addComponents(emojiInput)
+      );
 
-  const seconds = config.closeCountdownSeconds || 5;
-  await interaction.reply({ content: `🔒 Closing this ticket in ${seconds} seconds…` });
+      await click.showModal(catModal);
 
-  setTimeout(() => {
-    interaction.channel.delete().catch(() => {});
-  }, seconds * 1000);
-}
+      const catSubmit = await click
+        .awaitModalSubmit({ time: STEP_TIMEOUT, filter: (i) => i.customId === 'ticket_setup_cat_modal' && i.user.id === interaction.user.id })
+        .catch(() => null);
 
-module.exports = { createTicket, claimTicket, closeTicket, parseTopic, buildTicketControlRow };
+      if (!catSubmit) break; // timed out mid-category — fall through to save-what-we-have
+
+      const label = catSubmit.fields.getTextInputValue('cat_label').trim();
+      const existingIds = new Set(categories.map((c) => c.id));
+      categories.push({
+        id: uniqueId(slugify(label), existingIds),
+        label,
+        description: catSubmit.fields.getTextInputValue('cat_description').trim(),
+        emoji: catSubmit.fields.getTextInputValue('cat_emoji').trim() || undefined,
+      });
+
+      current = catSubmit;
+    }
+
+    // ---- Save (or bail if not enough categories were added) ----
+    if (categories.length < REQUIRED_COUNT) {
+      const msg = {
+        content: `⚠️ Setup cancelled — at least ${REQUIRED_COUNT} categories are required (you added ${categories.length}). Nothing was saved.`,
+        components: [],
+      };
+      if (current.replied || current.deferred) await current.followUp({ ...msg, ephemeral: true }).catch(() => {});
+      else await current.reply({ ...msg, ephemeral: true }).catch(() => {});
+      return;
+    }
+
+    config.panel = config.panel || {};
+    config.panel.title = panelTitle;
+    config.panel.description = panelDescription;
+    config.panel.style = style;
+    config.categories = categories;
+    saveConfig();
+
+    const doneMsg = {
+      content: `✅ Ticket panel setup saved! ${categories.length} categories configured as **${style}** style. Run \`/ticket-panel\` to post it.`,
+      components: [],
+    };
+
+    if (current.isButton && current.isButton() && current.customId === 'ticket_setup_finish') {
+      await current.update(doneMsg).catch(() => {});
+    } else if (current.replied || current.deferred) {
+      await current.followUp({ ...doneMsg, ephemeral: true }).catch(() => {});
+    } else {
+      await current.reply({ ...doneMsg, ephemeral: true }).catch(() => {});
+    }
+  },
+};
