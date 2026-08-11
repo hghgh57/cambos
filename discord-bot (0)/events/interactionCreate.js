@@ -1,4 +1,4 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } = require('discord.js');
 const { createTicket, claimTicket, closeTicket } = require('../utils/ticketManager');
 const { startDmApplication } = require('../utils/dmApplication');
 const config = require('../config.json');
@@ -6,6 +6,41 @@ const config = require('../config.json');
 function isApplicationStaff(member) {
   const roleIds = (config.applicationStaffRoleIds || []).filter((id) => id && !id.startsWith('PUT_'));
   return roleIds.some((id) => member.roles.cache.has(id));
+}
+
+// Rebuilds the ticket-category select menu from scratch (no option marked
+// as chosen) so re-editing the panel message with this resets the visible
+// selection back to the placeholder for everyone, instead of it staying
+// stuck showing the last person's pick.
+function buildTicketCategoryMenu() {
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId('ticket_category_select')
+    .setPlaceholder('Select a ticket category…')
+    .addOptions(
+      (config.categories || []).map((cat) => ({
+        label: cat.label,
+        description: (cat.description || '').slice(0, 100),
+        value: cat.id,
+        emoji: cat.emoji || undefined,
+      }))
+    );
+  return new ActionRowBuilder().addComponents(menu);
+}
+
+function buildApplicationMenu() {
+  const apps = config.applications || [];
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId('application_select')
+    .setPlaceholder('Select an application…')
+    .addOptions(
+      apps.map((app) => ({
+        label: app.label,
+        description: (app.description || '').slice(0, 100),
+        value: app.id,
+        emoji: app.emoji || undefined,
+      }))
+    );
+  return new ActionRowBuilder().addComponents(menu);
 }
 
 module.exports = {
@@ -20,7 +55,11 @@ module.exports = {
       }
 
       if (interaction.isStringSelectMenu() && interaction.customId === 'ticket_category_select') {
-        await createTicket(interaction, interaction.values[0]);
+        try {
+          await createTicket(interaction, interaction.values[0]);
+        } finally {
+          await interaction.message.edit({ components: [buildTicketCategoryMenu()] }).catch(() => {});
+        }
         return;
       }
 
@@ -28,20 +67,24 @@ module.exports = {
         const appId = interaction.values[0];
         const appConfig = (config.applications || []).find((a) => a.id === appId);
 
-        if (!appConfig) {
-          return interaction.reply({ content: 'That application no longer exists.', ephemeral: true });
+        try {
+          if (!appConfig) {
+            return await interaction.reply({ content: 'That application no longer exists.', ephemeral: true });
+          }
+
+          const started = await startDmApplication(interaction.guild, interaction.user, appId, appConfig);
+
+          if (!started) {
+            return await interaction.reply({
+              content: "❌ I couldn't DM you. Please enable direct messages from server members and try again.",
+              ephemeral: true,
+            });
+          }
+
+          return await interaction.reply({ content: '📬 Check your DMs to fill out the application!', ephemeral: true });
+        } finally {
+          await interaction.message.edit({ components: [buildApplicationMenu()] }).catch(() => {});
         }
-
-        const started = await startDmApplication(interaction.guild, interaction.user, appId, appConfig);
-
-        if (!started) {
-          return interaction.reply({
-            content: "❌ I couldn't DM you. Please enable direct messages from server members and try again.",
-            ephemeral: true,
-          });
-        }
-
-        return interaction.reply({ content: '📬 Check your DMs to fill out the application!', ephemeral: true });
       }
 
       if (interaction.isButton()) {
