@@ -19,7 +19,7 @@
   "panel": {
     "title": "",
     "description": "Select an option below to open a ticket.\n\n**Support** — Get support/help from our staff\n**Giveaway Claim** — Claim a giveaway/quickdrop you won\n**Giveaway Sponsor** — Sponsor a giveaway/quickdrop for the server\n**Spawner Sell** — Sell spawners to staff (never in DMs)\n**Spawner Buy** — Buy spawners from staff (never in DMs)",
-    "color": "#5865F2",
+    "color": "#800080",
     "style": "dropdown"
   },
   "categories": [
