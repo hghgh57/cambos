@@ -60,6 +60,21 @@
     }
   ],
 
+  "reactionRolesPanel": {
+    "title": "",
+    "description": ".",
+    "color": "#5865F2"
+  },
+  "reactionRoles": [
+    { "emoji": "📸", "roleId": "1536965025842077806", "label": "stream ping" },
+    { "emoji": "👀", "roleId": "1536652066263670874", "label": "dead chat ping" },
+    { "emoji": "🎉", "roleId": "1536651964442615818", "label": "quickdrop ping" },
+    { "emoji": "🎁", "roleId": "1536651999544741908", "label": "giveaway ping" },
+    { "emoji": "💀", "roleId": "1536652146294915083", "label": "spawner price ping" }
+  ],
+  "reactionRolesMessageId": "",
+  "reactionRolesChannelId": "",
+
   "applicationReviewChannelId": "PUT_APPLICATION_REVIEW_CHANNEL_ID_HERE",
   "applicationStaffRoleIds": ["PUT_APPLICATION_STAFF_ROLE_ID_HERE"],
   "applications": [
