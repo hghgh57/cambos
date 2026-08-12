@@ -17,30 +17,40 @@ module.exports = {
     const protectedIds = (config.protectedPingUserIds || []).filter((id) => id && !id.startsWith('PUT_'));
     if (!protectedIds.length) return;
 
-    const pingedProtected = message.mentions.users.some((u) => protectedIds.includes(u.id));
-    if (!pingedProtected) return;
+    // TEMP DEBUG — remove once this is confirmed working.
+    console.log(
+      `[ping-timeout] message from ${message.author.tag} (${message.author.id}) mentions: ${[...message.mentions.users.keys()].join(', ') || '(none)'} | protected list: ${protectedIds.join(', ')}`
+    );
 
-    // message.member isn't always populated from the gateway cache (e.g.
-    // for members discord.js hasn't seen recently) — fetch it directly
-    // rather than silently bailing out.
-    const member = message.member ?? (await message.guild.members.fetch(message.author.id).catch(() => null));
-    if (!member) {
-      console.warn(`Could not resolve member ${message.author.id} to apply ping-timeout.`);
+    const pingedProtected = message.mentions.users.some((u) => protectedIds.includes(u.id));
+    if (!pingedProtected) {
+      console.log('[ping-timeout] no protected user was mentioned — skipping.');
       return;
     }
 
-    if (isExemptStaff(member)) return;
+    const member = message.member ?? (await message.guild.members.fetch(message.author.id).catch(() => null));
+    if (!member) {
+      console.warn(`[ping-timeout] could not resolve member ${message.author.id}.`);
+      return;
+    }
+
+    if (isExemptStaff(member)) {
+      console.log(`[ping-timeout] ${message.author.tag} is exempt staff — skipping.`);
+      return;
+    }
 
     const minutes = config.pingTimeoutMinutes || 10;
+    console.log(`[ping-timeout] attempting to timeout ${message.author.tag} for ${minutes} minute(s)...`);
 
-    await member.timeout(minutes * 60 * 1000, 'Pinged a protected user').catch((err) => {
-      console.error('Failed to timeout member for pinging a protected user:', err);
-    });
+    await member.timeout(minutes * 60 * 1000, 'Pinged a protected user').then(
+      () => console.log(`[ping-timeout] timeout applied successfully to ${message.author.tag}.`),
+      (err) => console.error('[ping-timeout] timeout FAILED:', err)
+    );
 
     await message
       .reply({ content: `⛔ ${message.author}, you've been timed out for ${minutes} minute(s) for pinging a protected user.` })
       .catch((err) => {
-        console.error('Failed to send ping-timeout notice:', err);
+        console.error('[ping-timeout] failed to send notice:', err);
       });
   },
 };
