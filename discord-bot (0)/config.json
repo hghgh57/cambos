@@ -8,9 +8,9 @@
   },
   "protectedPingUserIds": ["731527891862552666", "1281967125233401994"],
   "pingTimeoutMinutes": 10,
-  "pingProtectionRoleId": "",
-  "pingProtectionRoleId": "",
-  "pingProtectionRoleId": "",
+  "pingProtectionUserIds": [""]
+  "pingProtectionUserIds": [""]
+  "pingProtectionUserIds": ["1480382650551111844"]
   "pingProtectionRoleId": "1480382650551111844",
   "botStatus": "cambo x hightide = aura",
   "ticketCategoryId": "",
