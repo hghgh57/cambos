@@ -11,21 +11,41 @@ function isExemptStaff(member) {
 
 // Deletes any message that pings a member holding the configured
 // "Ping Protection" role — no timeout, just removes the message. Staff
-// (same exemption as the timeout feature below) can still ping them.
-// Returns true if the message was removed.
+// are exempt. Returns true if the message was removed.
 async function enforcePingProtection(message, member) {
   const roleId = config.pingProtectionRoleId;
   if (!roleId || roleId.startsWith('PUT_')) return false;
   if (!message.mentions.users.size) return false;
 
-  const protectedHit = message.mentions.members?.some((m) => m.roles.cache.has(roleId));
+  // message.mentions.members only reflects members already in Discord.js's
+  // cache — it can come back empty even for a clearly-mentioned user, so
+  // fetch each mentioned user's member data directly instead of trusting it.
+  let protectedHit = false;
+  for (const [, mentionedUser] of message.mentions.users) {
+    const mentionedMember =
+      message.mentions.members?.get(mentionedUser.id) ??
+      (await message.guild.members.fetch(mentionedUser.id).catch(() => null));
+    if (mentionedMember?.roles.cache.has(roleId)) {
+      protectedHit = true;
+      break;
+    }
+  }
+
+  console.log(
+    `[ping-protection] message from ${message.author.tag} mentions: ${[...message.mentions.users.keys()].join(', ') || '(none)'} | protected role: ${roleId} | hit: ${protectedHit}`
+  );
+
   if (!protectedHit) return false;
 
-  if (isExemptStaff(member)) return false;
+  if (isExemptStaff(member)) {
+    console.log(`[ping-protection] ${message.author.tag} is exempt staff — not deleting.`);
+    return false;
+  }
 
-  await message.delete().catch((err) => {
-    console.error('Failed to delete message pinging a ping-protected member:', err);
-  });
+  await message.delete().then(
+    () => console.log(`[ping-protection] deleted message from ${message.author.tag}.`),
+    (err) => console.error('[ping-protection] FAILED to delete message:', err)
+  );
 
   await message.channel
     .send({ content: `${message.author}, that member has ping protection — you can't ping them.` })
@@ -40,18 +60,14 @@ module.exports = {
   async execute(message) {
     if (message.author.bot || !message.guild) return;
 
-    // message.member isn't always populated from the gateway cache — fetch
-    // it directly rather than silently skipping.
     const member = message.member ?? (await message.guild.members.fetch(message.author.id).catch(() => null));
     if (!member) {
       console.warn(`Could not resolve member ${message.author.id} for ping checks.`);
       return;
     }
 
-    // Role-based: delete-on-sight, no punishment.
     if (await enforcePingProtection(message, member)) return;
 
-    // User-list-based: timeout the pinger.
     const protectedIds = (config.protectedPingUserIds || []).filter((id) => id && !id.startsWith('PUT_'));
     if (!protectedIds.length) return;
 
