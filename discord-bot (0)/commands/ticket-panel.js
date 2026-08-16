@@ -10,6 +10,14 @@ const {
 } = require('discord.js');
 const config = require('../config.json');
 
+// ContainerBuilder.setAccentColor needs a number (or null), not a hex
+// string like EmbedBuilder.setColor accepts — convert here.
+function hexToInt(hex, fallback = 0x5865f2) {
+  if (!hex) return fallback;
+  const parsed = parseInt(hex.replace('#', ''), 16);
+  return Number.isNaN(parsed) ? fallback : parsed;
+}
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('ticket-panel')
@@ -28,7 +36,7 @@ module.exports = {
 
     const titleText = config.panel.title ? `## ${config.panel.title}\n` : '';
     const container = new ContainerBuilder()
-      .setAccentColor(config.panel.color || '#5865F2')
+      .setAccentColor(hexToInt(config.panel.color))
       .addTextDisplayComponents((td) => td.setContent(`${titleText}${config.panel.description}`));
 
     if (style === 'buttons') {
