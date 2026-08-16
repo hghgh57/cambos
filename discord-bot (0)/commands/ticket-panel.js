@@ -1,11 +1,12 @@
 const {
   SlashCommandBuilder,
-  EmbedBuilder,
+  ContainerBuilder,
   ActionRowBuilder,
   StringSelectMenuBuilder,
   ButtonBuilder,
   ButtonStyle,
   PermissionFlagsBits,
+  MessageFlags,
 } = require('discord.js');
 const config = require('../config.json');
 
@@ -23,19 +24,18 @@ module.exports = {
     ),
 
   async execute(interaction) {
-    const embed = new EmbedBuilder()
-      .setDescription(config.panel.description)
-      .setColor(config.panel.color || '#5865F2');
-    if (config.panel.title) embed.setTitle(config.panel.title);
-
     const style = interaction.options.getString('style') || config.panel.style || 'dropdown';
-    const components = [];
+
+    const titleText = config.panel.title ? `## ${config.panel.title}\n` : '';
+    const container = new ContainerBuilder()
+      .setAccentColor(config.panel.color || '#5865F2')
+      .addTextDisplayComponents((td) => td.setContent(`${titleText}${config.panel.description}`));
 
     if (style === 'buttons') {
       let row = new ActionRowBuilder();
       config.categories.forEach((cat, i) => {
         if (i > 0 && i % 5 === 0) {
-          components.push(row);
+          container.addActionRowComponents(row);
           row = new ActionRowBuilder();
         }
         row.addComponents(
@@ -46,7 +46,7 @@ module.exports = {
             .setStyle(ButtonStyle.Primary)
         );
       });
-      components.push(row);
+      container.addActionRowComponents(row);
     } else {
       const menu = new StringSelectMenuBuilder()
         .setCustomId('ticket_category_select')
@@ -59,10 +59,10 @@ module.exports = {
             emoji: cat.emoji || undefined,
           }))
         );
-      components.push(new ActionRowBuilder().addComponents(menu));
+      container.addActionRowComponents((row) => row.addComponents(menu));
     }
 
-    await interaction.channel.send({ embeds: [embed], components });
+    await interaction.channel.send({ components: [container], flags: MessageFlags.IsComponentsV2 });
     await interaction.reply({ content: 'Ticket panel posted.', ephemeral: true });
   },
 };
