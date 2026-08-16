@@ -11,6 +11,14 @@ const { createTicket, claimTicket, closeTicket } = require('../utils/ticketManag
 const { startDmApplication } = require('../utils/dmApplication');
 const config = require('../config.json');
 
+// ContainerBuilder.setAccentColor needs a number (or null), not a hex
+// string like EmbedBuilder.setColor accepts — convert here.
+function hexToInt(hex, fallback = 0x5865f2) {
+  if (!hex) return fallback;
+  const parsed = parseInt(hex.replace('#', ''), 16);
+  return Number.isNaN(parsed) ? fallback : parsed;
+}
+
 function isApplicationStaff(member) {
   const roleIds = (config.applicationStaffRoleIds || []).filter((id) => id && !id.startsWith('PUT_'));
   return roleIds.some((id) => member.roles.cache.has(id));
@@ -37,7 +45,7 @@ function buildTicketCategoryPanel() {
 
   const titleText = config.panel.title ? `## ${config.panel.title}\n` : '';
   return new ContainerBuilder()
-    .setAccentColor(config.panel.color || '#5865F2')
+    .setAccentColor(hexToInt(config.panel.color))
     .addTextDisplayComponents((td) => td.setContent(`${titleText}${config.panel.description}`))
     .addActionRowComponents((row) => row.addComponents(menu));
 }
@@ -57,7 +65,7 @@ function buildApplicationPanel() {
     );
 
   return new ContainerBuilder()
-    .setAccentColor('#5865F2')
+    .setAccentColor(hexToInt())
     .addTextDisplayComponents((td) => td.setContent('Select which application you want to fill out below.'))
     .addActionRowComponents((row) => row.addComponents(menu));
 }
