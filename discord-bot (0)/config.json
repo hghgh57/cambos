@@ -72,8 +72,8 @@
   ],
   "reactionRolesMessageId": "",
   "reactionRolesChannelId": "",
-  "applicationReviewChannelId": "PUT_APPLICATION_REVIEW_CHANNEL_ID_HERE",
-  "applicationStaffRoleIds": ["PUT_APPLICATION_STAFF_ROLE_ID_HERE"],
+  "applicationReviewChannelId": "1536640527603343390",
+  "applicationStaffRoleIds": ["1536613721445630083"],
   "applications": [
     {
       "id": "staff",
